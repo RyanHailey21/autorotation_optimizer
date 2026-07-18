@@ -65,6 +65,34 @@ python3 -m venv .venv
 
 ## Run
 
+### Local application
+
+Launch the local configuration and results application from WSL:
+
+```bash
+./run_app.sh
+```
+
+Or launch it from PowerShell:
+
+```powershell
+.\run_app.ps1
+```
+
+The launcher opens `http://127.0.0.1:8765/`. The interface is browser-based but
+entirely local: it binds to the loopback interface, runs the existing workflow
+and native C++ solver in WSL, and sends no project data to an external service.
+It exposes aerodynamic source, airfoil set, concurrency, cache controls, body
+mass, release height, radius bounds, evaluation limit, design tolerance, and
+the rotor-speed penalty threshold. Runs are asynchronous and can be cancelled;
+live logs, the latest result, the full report, and machine-readable artifacts
+remain available in the application.
+
+Use `./run_app.sh --no-open --port 9000` to select a port without opening a
+browser. Stop the local server with Ctrl+C.
+
+### Command line
+
 From PowerShell in the project directory:
 
 ```powershell
@@ -138,6 +166,17 @@ The reusable C++ model, optimizer, and result-I/O APIs are exposed by the
 ```bash
 ctest --test-dir build --output-on-failure
 python3 -m unittest discover -s python -p 'test_*.py'
+```
+
+The command-line workflow accepts the same engineering settings used by the
+application. For example:
+
+```bash
+bash ./run.sh --airfoils NACA0012 NACA2409 --jobs 2 \
+  --body-mass-kg 0.12 --release-height-m 25 \
+  --radius-min-m 0.15 --radius-max-m 0.50 \
+  --max-evaluations 750 --relative-x-tolerance 0.001 \
+  --omega-penalty-threshold-rad-s 2500
 ```
 
 The executable clamps aerodynamic queries outside the polar grid and assigns

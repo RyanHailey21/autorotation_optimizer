@@ -80,6 +80,7 @@ def parse_result(output: str) -> dict[str, float | int | str]:
         "optimizer": field(output, "optimizer"),
         "maximum_evaluations": int(number(output, "max evaluations")),
         "relative_x_tolerance": number(output, "relative x tol"),
+        "omega_penalty_threshold_rad_s": number(output, "omega penalty limit"),
         "radius_lower_bound_m": float(radius_bounds[0]),
         "radius_upper_bound_m": float(radius_bounds[1]),
     }
@@ -138,6 +139,9 @@ def parse_result_json(document: dict[str, Any]) -> dict[str, float | int | str]:
             ),
             "relative_x_tolerance": float(
                 optimization_config["relative_x_tolerance"]
+            ),
+            "omega_penalty_threshold_rad_s": float(
+                optimization_config.get("omega_penalty_threshold_rad_s", 2500.0)
             ),
             "radius_lower_bound_m": float(
                 optimization_config["radius_lower_bound_m"]

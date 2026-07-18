@@ -25,9 +25,36 @@ versioned JSON result written by `--result-json`.
 | `run_optimization.py` | Build, cache, parallelize per-airfoil runs, rank results, and invoke reporting |
 | `optimizer_result.py` | Normalize versioned JSON; retain terminal-text parsing for compatibility |
 | `reporting.py` | Produce offline HTML, summary JSON, leaderboard CSV, and the best trace |
+| `application.py` | Validate UI requests, manage one asynchronous local workflow, stream bounded logs, and serve artifacts |
+| `app/` | Dependency-free browser presentation for configuration, activity, and latest results |
 
 The `autorotation_core` CMake target contains the reusable C++ implementation.
 `autorotation_opt` is a thin executable linked to that target.
+
+## Local application boundary
+
+`run_app.sh` starts a standard-library Python HTTP server on
+`127.0.0.1:8765`. The browser is a local presentation surface, not a hosted
+service: all polar generation, builds, solver processes, caches, and reports
+remain in the working copy under WSL. `run_app.ps1` starts the same server from
+Windows and opens the loopback URL.
+
+The application exposes only validated workflow and solver configuration. It
+constructs a subprocess argument vector and never invokes a shell with user
+input. One workflow may be active at a time. Cancellation signals the process
+group so the runner and concurrent optimizer children terminate together. Log
+history is bounded in memory, static/report files are served from explicit
+allowlists, POST requests enforce same-origin access, and request bodies are
+size-limited.
+
+The UI intentionally does not contain aerodynamic, mass, objective, or
+optimization logic. Adding a field requires plumbing it through these layers:
+
+1. `RunConfiguration` validation in `application.py`;
+2. `SolverConfiguration` and its cache identity in `run_optimization.py`;
+3. a validated C++ CLI option that updates the typed configuration;
+4. the versioned JSON engineering record and report, where relevant; and
+5. boundary, cache-key, and result-contract tests.
 
 ## Execution flow
 
@@ -59,6 +86,12 @@ Defaults used by the production case are explicit C++ values in
   result penalties; and
 - `OptimizationConfig`: bounds, initial design, evaluation limit, tolerance,
   and objective configuration.
+
+The local application currently exposes body mass, release height, radius
+bounds, maximum evaluations, relative design tolerance, and the rotor-speed
+penalty threshold. Defaults remain the values in the C++ types; the UI and
+Python defaults mirror them and are protected by tests. C++ validates submitted
+values before constructing the model or NLopt optimizer.
 
 Changing any value that can affect an optimized result changes the linked
 executable and therefore invalidates the per-airfoil optimization cache. New
@@ -108,8 +141,9 @@ Generated artifacts live under `.cache/` and are not source files.
 - Polar keys cover the backend, airfoil, generator contents, generated output
   hash, and relevant Python package versions.
 - Optimization keys cover the linked executable and polar contents. Because
-  C++ configuration defaults compile into the executable, configuration changes
-  invalidate these entries.
+  C++ configuration defaults compile into the executable, default changes
+  invalidate these entries. Submitted `SolverConfiguration` values are also
+  serialized into the key so two UI configurations cannot share a result.
 - Report keys cover normalized metrics, trace contents, report-generator
   contents, Plotly version, and backend.
 
@@ -131,7 +165,8 @@ python3 -m unittest discover -s python -p 'test_*.py'
 
 C++ tests cover polar interpolation and confidence, objective penalties,
 geometry validation, printed mass/inertia behavior, and aerodynamic-table
-identity. Python tests cover text/JSON contracts and cache invalidation.
+identity. Python tests cover text/JSON contracts, cache invalidation,
+application validation, and argument-safe command construction.
 
 ### Tracked-polar smoke test
 

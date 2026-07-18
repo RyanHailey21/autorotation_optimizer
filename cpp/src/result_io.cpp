@@ -96,5 +96,7 @@ void write_result_json(const std::filesystem::path& path,
            << ",\n    \"relative_x_tolerance\": " << optimization_config.relative_x_tolerance
            << ",\n    \"radius_lower_bound_m\": " << optimization_config.lower_bounds[0]
            << ",\n    \"radius_upper_bound_m\": " << optimization_config.upper_bounds[0]
+           << ",\n    \"omega_penalty_threshold_rad_s\": "
+           << optimization_config.objective.maximum_omega
            << "\n  }\n}\n";
 }

@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+import io
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 import run_optimization
+from run_optimization import SolverConfiguration
 
 
 class CacheKeyTests(unittest.TestCase):
@@ -28,6 +31,22 @@ class CacheKeyTests(unittest.TestCase):
 
             self.assertNotEqual(original, polar_changed)
             self.assertNotEqual(original, executable_changed)
+
+    def test_optimization_key_covers_solver_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            executable = root / "optimizer"
+            polar = root / "polar.csv"
+            executable.write_bytes(b"executable")
+            polar.write_bytes(b"polar")
+            with patch.object(run_optimization, "EXECUTABLE", executable):
+                original = run_optimization.optimization_key(
+                    polar, SolverConfiguration()
+                )
+                changed = run_optimization.optimization_key(
+                    polar, SolverConfiguration(body_mass_kg=0.2)
+                )
+            self.assertNotEqual(original, changed)
 
     def test_report_key_covers_metrics_trace_and_generator(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -52,6 +71,25 @@ class CacheKeyTests(unittest.TestCase):
             self.assertNotEqual(original, metrics_changed)
             self.assertNotEqual(original, trace_changed)
             self.assertNotEqual(original, generator_changed)
+
+
+class CommandOutputTests(unittest.TestCase):
+    def test_normal_output_uses_label_without_exposing_command(self) -> None:
+        output = io.StringIO()
+        with patch("run_optimization.subprocess.run"), redirect_stdout(output):
+            run_optimization.run(
+                ["private-executable", "/long/private/cache/path"],
+                label="Building optimizer ...",
+            )
+        self.assertEqual(output.getvalue(), "Building optimizer ...\n")
+
+    def test_debug_output_uses_shell_safe_command(self) -> None:
+        output = io.StringIO()
+        with patch("run_optimization.subprocess.run"), \
+                patch.dict("os.environ", {"AUTOROTATION_VERBOSE_COMMANDS": "1"}), \
+                redirect_stdout(output):
+            run_optimization.run(["tool", "value with spaces"], label="Ignored")
+        self.assertEqual(output.getvalue(), "+ tool 'value with spaces'\n")
 
 
 if __name__ == "__main__":

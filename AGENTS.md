@@ -28,6 +28,12 @@ artifacts, caching, or orchestration.
   command-line parsing, component wiring, and human-readable presentation.
 - Use the versioned `--result-json` artifact for programmatic consumers. Do not
   add another parser for human-readable terminal output.
+- Keep the local application a thin orchestration and presentation layer. It
+  may launch and monitor the workflow but must not implement model physics or
+  objective evaluation in Python or JavaScript.
+- Validate application configuration at the HTTP boundary and again at the
+  command-line/native boundary. Pass subprocess arguments as an array without
+  shell interpolation, and include every result-changing value in cache keys.
 - Preserve the compile-time no-trace objective path. Collect telemetry only for
   final optimized candidates; reporting must not slow objective evaluations.
 - Preserve content-addressed caching for polar generation, builds where
@@ -85,6 +91,8 @@ artifacts, caching, or orchestration.
   contain finite data and that an unchanged rerun uses cached work.
 - Never claim design readiness from optimizer output alone. Physical release
   requires independent analysis and instrumented testing.
+- Keep the application loopback-only by default and do not introduce analytics,
+  remote assets, external data transfer, or unauthenticated non-local binding.
 
 ## Repository hygiene
 

@@ -39,6 +39,7 @@ hardware mass:    0 g
 optimizer:        NLopt LN_COBYLA
 max evaluations:  500
 relative x tol:   0.001
+omega penalty limit: 2500 rad/s
 radius bounds:    0.12 0.45 m
 """
 
@@ -103,6 +104,7 @@ class OptimizerResultTests(unittest.TestCase):
                 "optimizer": "NLopt LN_COBYLA", "maximum_evaluations": 500,
                 "relative_x_tolerance": 0.001,
                 "radius_lower_bound_m": 0.12, "radius_upper_bound_m": 0.45,
+                "omega_penalty_threshold_rad_s": 2500.0,
             },
         }
         result = parse_result_json(document)

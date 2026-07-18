@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 import hashlib
 import importlib.metadata
 import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -35,6 +37,30 @@ DEFAULT_AIRFOILS = [
 ]
 
 
+@dataclass(frozen=True)
+class SolverConfiguration:
+    body_mass_kg: float = 0.100
+    release_height_m: float = 20.0
+    maximum_evaluations: int = 500
+    relative_x_tolerance: float = 1.0e-3
+    radius_min_m: float = 0.12
+    radius_max_m: float = 0.45
+    omega_penalty_threshold_rad_s: float = 2500.0
+
+
+def solver_arguments(configuration: SolverConfiguration) -> list[str]:
+    return [
+        "--body-mass-kg", str(configuration.body_mass_kg),
+        "--release-height-m", str(configuration.release_height_m),
+        "--max-evaluations", str(configuration.maximum_evaluations),
+        "--relative-x-tolerance", str(configuration.relative_x_tolerance),
+        "--radius-min-m", str(configuration.radius_min_m),
+        "--radius-max-m", str(configuration.radius_max_m),
+        "--omega-penalty-threshold-rad-s",
+        str(configuration.omega_penalty_threshold_rad_s),
+    ]
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -43,8 +69,12 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def run(command: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
-    print("+", " ".join(command), flush=True)
+def run(command: list[str], *, capture: bool = False,
+        label: str | None = None) -> subprocess.CompletedProcess[str]:
+    if os.environ.get("AUTOROTATION_VERBOSE_COMMANDS") == "1":
+        print("+", shlex.join(command), flush=True)
+    elif label:
+        print(label, flush=True)
     return subprocess.run(
         command, cwd=ROOT, check=True, text=True,
         stdout=subprocess.PIPE if capture else None,
@@ -115,15 +145,16 @@ def prepare_polar(backend: str, airfoil: str, refresh: bool) -> Path:
 def build() -> None:
     if not (BUILD_DIR / "CMakeCache.txt").exists():
         run(["cmake", "-S", "cpp", "-B", "build", "-G", "Ninja",
-             "-DCMAKE_BUILD_TYPE=Release"])
-    run(["cmake", "--build", "build", "-j"])
+             "-DCMAKE_BUILD_TYPE=Release"], label="Configuring Release build ...")
+    run(["cmake", "--build", "build", "-j"], label="Building C++ optimizer ...")
 
 
-def optimization_key(polar: Path) -> str:
+def optimization_key(polar: Path, configuration: SolverConfiguration = SolverConfiguration()) -> str:
     digest = hashlib.sha256()
-    digest.update(b"autorotation-run-cache-v3-json\0")
+    digest.update(b"autorotation-run-cache-v4-config-json\0")
     digest.update(file_sha256(EXECUTABLE).encode())
     digest.update(file_sha256(polar).encode())
+    digest.update(json.dumps(configuration.__dict__, sort_keys=True).encode())
     return digest.hexdigest()
 
 
@@ -154,8 +185,8 @@ def prepare_report(results: list[dict[str, object]], backend: str) -> Path:
     return report_path
 
 
-def optimize(polar: Path, force: bool) -> tuple[str, Path, dict[str, object]]:
-    key = optimization_key(polar)
+def optimize(polar: Path, force: bool, configuration: SolverConfiguration) -> tuple[str, Path, dict[str, object]]:
+    key = optimization_key(polar, configuration)
     result_path = RUN_CACHE / f"{key}.txt"
     trace_path = RUN_CACHE / f"{key}.csv"
     json_path = RUN_CACHE / f"{key}.json"
@@ -166,8 +197,10 @@ def optimize(polar: Path, force: bool) -> tuple[str, Path, dict[str, object]]:
     RUN_CACHE.mkdir(parents=True, exist_ok=True)
     completed = run(
         [str(EXECUTABLE), "--root", str(ROOT), "--polar", str(polar),
-         "--trace", str(trace_path), "--result-json", str(json_path), "--quiet"],
+         "--trace", str(trace_path), "--result-json", str(json_path), "--quiet",
+         *solver_arguments(configuration)],
         capture=True,
+        label=f"Running geometry search for {polar.stem.split('-', 1)[-1]} ...",
     )
     output = completed.stdout
     result_path.write_text(output)
@@ -187,6 +220,13 @@ def main() -> None:
                         help="regenerate every requested aerodynamic polar")
     parser.add_argument("--jobs", type=int, default=min(4, os.cpu_count() or 1),
                         help="number of airfoil geometry optimizations to run concurrently")
+    parser.add_argument("--body-mass-kg", type=float, default=0.100)
+    parser.add_argument("--release-height-m", type=float, default=20.0)
+    parser.add_argument("--max-evaluations", type=int, default=500)
+    parser.add_argument("--relative-x-tolerance", type=float, default=1.0e-3)
+    parser.add_argument("--radius-min-m", type=float, default=0.12)
+    parser.add_argument("--radius-max-m", type=float, default=0.45)
+    parser.add_argument("--omega-penalty-threshold-rad-s", type=float, default=2500.0)
     args = parser.parse_args()
 
     airfoils = list(dict.fromkeys(name.upper() for name in args.airfoils))
@@ -195,6 +235,23 @@ def main() -> None:
         parser.error(f"expected four-digit NACA names; invalid: {', '.join(invalid)}")
     if args.jobs < 1:
         parser.error("--jobs must be at least 1")
+    if args.body_mass_kg <= 0 or args.release_height_m <= 0:
+        parser.error("mass and release height must be positive")
+    if args.max_evaluations < 1 or args.relative_x_tolerance <= 0:
+        parser.error("evaluation limit and relative tolerance must be positive")
+    if args.radius_min_m <= 0 or args.radius_min_m >= args.radius_max_m:
+        parser.error("radius bounds must be positive and increasing")
+    if args.omega_penalty_threshold_rad_s <= 0:
+        parser.error("rotor-speed penalty threshold must be positive")
+    solver_configuration = SolverConfiguration(
+        body_mass_kg=args.body_mass_kg,
+        release_height_m=args.release_height_m,
+        maximum_evaluations=args.max_evaluations,
+        relative_x_tolerance=args.relative_x_tolerance,
+        radius_min_m=args.radius_min_m,
+        radius_max_m=args.radius_max_m,
+        omega_penalty_threshold_rad_s=args.omega_penalty_threshold_rad_s,
+    )
 
     polars = [
         prepare_polar(args.backend, airfoil, args.refresh_polar)
@@ -204,7 +261,9 @@ def main() -> None:
 
     print(f"Optimizing {len(airfoils)} airfoils with {args.jobs} concurrent jobs ...")
     with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-        optimized = list(executor.map(lambda polar: optimize(polar, args.force), polars))
+        optimized = list(executor.map(
+            lambda polar: optimize(polar, args.force, solver_configuration), polars
+        ))
 
     results = []
     for airfoil, polar, (output, trace_path, document) in zip(

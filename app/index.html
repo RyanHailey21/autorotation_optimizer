@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autorotation Optimizer</title>
+  <link rel="stylesheet" href="/styles.css?v=6">
+  <script src="/app.js?v=6" defer></script>
+</head>
+<body>
+  <header>
+    <h1>Autorotation Optimizer</h1>
+    <span>Local</span>
+  </header>
+
+  <main>
+    <div id="notice" class="notice" role="alert" hidden></div>
+
+    <div class="workspace">
+      <form id="configuration" class="panel">
+        <div class="panel-heading">
+          <h2>Configuration</h2>
+          <button type="button" id="reset" class="link-button">Reset</button>
+        </div>
+
+        <fieldset>
+          <legend>Aerodynamic source</legend>
+          <div class="segmented">
+            <label><input type="radio" name="backend" value="neuralfoil" checked><span>NeuralFoil</span></label>
+            <label><input type="radio" name="backend" value="fallback"><span>Fallback</span></label>
+          </div>
+          <p id="backend-help" class="help">Recommended for engineering runs.</p>
+        </fieldset>
+
+        <fieldset>
+          <div class="legend-row">
+            <span>Airfoils</span>
+            <span id="selection-count" class="counter">16 selected</span>
+          </div>
+          <div class="preset-row" role="group" aria-label="Airfoil presets">
+            <button type="button" data-preset="all">All</button>
+            <button type="button" data-preset="cambered">Cambered</button>
+            <button type="button" data-preset="symmetric">Symmetric</button>
+            <button type="button" data-preset="clear">Clear</button>
+          </div>
+          <div id="airfoil-grid" class="airfoil-grid"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Parallel jobs</legend>
+          <div class="range-row">
+            <input id="jobs" name="jobs" type="range" min="1" max="16" value="4">
+            <output id="jobs-output" for="jobs">4</output>
+          </div>
+        </fieldset>
+
+        <details class="engineering-settings">
+          <summary>Engineering settings</summary>
+          <div class="input-grid">
+            <label><span>Body mass (kg)</span><input id="body-mass" type="number" min="0.001" max="10" step="0.001" required></label>
+            <label><span>Release height (m)</span><input id="release-height" type="number" min="0.1" max="1000" step="0.1" required></label>
+            <label><span>Minimum radius (m)</span><input id="radius-min" type="number" min="0.02" max="5" step="0.01" required></label>
+            <label><span>Maximum radius (m)</span><input id="radius-max" type="number" min="0.02" max="5" step="0.01" required></label>
+            <label><span>Maximum evaluations</span><input id="max-evaluations" type="number" min="1" max="100000" step="1" required></label>
+            <label><span>Relative tolerance</span><input id="x-tolerance" type="number" min="0.00000001" max="0.1" step="any" required></label>
+            <label class="wide"><span>Rotor-speed penalty threshold (rad/s)</span><input id="omega-threshold" type="number" min="1" max="100000" step="1" required></label>
+          </div>
+        </details>
+
+        <details>
+          <summary>Cache settings</summary>
+          <div class="toggle-list">
+            <label><input id="force" type="checkbox"><span>Repeat optimization</span></label>
+            <label><input id="refresh-polar" type="checkbox"><span>Regenerate polar tables</span></label>
+          </div>
+        </details>
+
+        <div class="actions">
+          <button id="run" class="primary-button" type="submit">Run optimization</button>
+          <button id="cancel" class="danger-button" type="button" hidden>Cancel</button>
+        </div>
+      </form>
+
+      <section class="right-column">
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Run status</h2>
+            <span id="run-status" class="status idle">Idle</span>
+          </div>
+          <div id="progress" class="progress" aria-hidden="true"><span></span></div>
+          <div class="run-summary">
+            <p id="run-message">Ready.</p>
+            <time id="run-duration"></time>
+          </div>
+          <div class="terminal-heading"><span>Output</span><button id="copy-log" class="link-button" type="button">Copy</button></div>
+          <pre id="log" class="terminal" tabindex="0"><span class="muted">No output.</span></pre>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading">
+            <h2>Latest result</h2>
+            <a id="open-report" class="link-button" href="/report/" target="_blank" rel="noopener" hidden>Open report</a>
+          </div>
+          <div id="empty-result" class="empty-state">No report available.</div>
+          <div id="result-content" hidden>
+            <div class="winner-row">
+              <div><span>Airfoil</span><strong id="best-airfoil">—</strong></div>
+              <span id="result-backend" class="source-badge">—</span>
+            </div>
+            <div class="metrics">
+              <div><span>Fall time (s)</span><strong id="fall-time">—</strong></div>
+              <div><span>Impact speed (m/s)</span><strong id="impact-speed">—</strong></div>
+              <div><span>Total mass (g)</span><strong id="total-mass">—</strong></div>
+              <div><span>Peak speed (RPM)</span><strong id="max-rpm">—</strong></div>
+            </div>
+            <div class="result-footer">
+              <span id="generated-at">—</span>
+              <div>
+                <a href="/report/summary.json" target="_blank">JSON</a>
+                <a href="/report/leaderboard.csv" target="_blank">CSV</a>
+                <a href="/report/best-trace.csv" target="_blank">Trace</a>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </div>
+  </main>
+
+  <footer>Results require independent validation before hardware use.</footer>
+</body>
+</html>

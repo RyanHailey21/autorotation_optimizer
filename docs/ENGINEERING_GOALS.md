@@ -42,6 +42,12 @@ relative design tolerance of 1e-3. These are part of the problem definition,
 not incidental implementation details. Their implementation source of truth is
 `OptimizationConfig` in `cpp/include/types.hpp`.
 
+The local application can override body mass, release height, radius bounds,
+evaluation limit, tolerance, and rotor-speed penalty threshold for a run. Such
+an override defines a different engineering case: it receives a distinct cache
+identity and must be reported with its result. Application defaults reproduce
+the production case documented here.
+
 ## Physical model
 
 The transient simulation integrates vertical translation and rotor speed. Its
