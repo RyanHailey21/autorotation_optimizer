@@ -8,7 +8,6 @@ import html
 import json
 import math
 from pathlib import Path
-import re
 import shutil
 
 import plotly.graph_objects as go
@@ -16,15 +15,9 @@ from plotly.offline import get_plotlyjs
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
+from optimizer_result import parse_result
 
-STATUS_NAMES = {
-    1: "SUCCESS",
-    2: "STOPVAL_REACHED",
-    3: "FTOL_REACHED",
-    4: "XTOL_REACHED",
-    5: "MAXEVAL_REACHED",
-    6: "MAXTIME_REACHED",
-}
+
 PLOT_CONFIG = {
     "displaylogo": False,
     "responsive": True,
@@ -40,57 +33,6 @@ REPORT_COLUMNS = DESIGN_COLUMNS + [
     "total_mass_g", "max_rpm", "status_name", "mean_prandtl_factor",
     "mean_axial_induction", "induction_failure_percent",
 ]
-
-
-def field(output: str, name: str) -> str:
-    match = re.search(rf"^{re.escape(name)}:\s*(.+)$", output, re.MULTILINE)
-    if not match:
-        raise RuntimeError(f"Optimizer output is missing '{name}'")
-    return match.group(1).strip()
-
-
-def number(output: str, name: str) -> float:
-    return float(field(output, name).split()[0])
-
-
-def parse_result(output: str) -> dict[str, float | int | str]:
-    status = int(field(output, "Optimization status"))
-    omega = number(output, "max omega")
-    return {
-        "status": status,
-        "status_name": STATUS_NAMES.get(status, f"NLOPT_{status}"),
-        "airfoil": field(output, "airfoil"),
-        "objective": number(output, "objective"),
-        "radius_m": number(output, "radius"),
-        "root_chord_m": number(output, "root chord"),
-        "tip_chord_m": number(output, "tip chord"),
-        "root_pitch_rad": number(output, "root pitch"),
-        "tip_twist_rad": number(output, "tip twist"),
-        "blade_count": int(number(output, "blade count")),
-        "rotor_mass_g": number(output, "rotor mass"),
-        "body_mass_g": number(output, "body mass"),
-        "total_mass_g": number(output, "total mass"),
-        "fall_time_s": number(output, "fall time"),
-        "impact_speed_m_s": number(output, "impact speed"),
-        "max_omega_rad_s": omega,
-        "max_rpm": omega * 60.0 / (2.0 * math.pi),
-        "mean_prandtl_factor": number(output, "mean tip/root F"),
-        "mean_axial_induction": number(output, "mean induction a"),
-        "induction_failure_percent": number(output, "induction failed"),
-        "release_height_m": number(output, "release height"),
-        "time_step_s": number(output, "time step"),
-        "radial_elements": int(number(output, "radial elements")),
-        "root_cutout_m": number(output, "root cutout"),
-        "material_density_kg_m3": number(output, "material density"),
-        "infill_fraction": number(output, "infill fraction"),
-        "wall_thickness_m": number(output, "wall thickness"),
-        "hardware_mass_g": number(output, "hardware mass"),
-        "optimizer": field(output, "optimizer"),
-        "maximum_evaluations": int(number(output, "max evaluations")),
-        "relative_x_tolerance": number(output, "relative x tol"),
-        "radius_lower_bound_m": float(field(output, "radius bounds").split()[0]),
-        "radius_upper_bound_m": float(field(output, "radius bounds").split()[1]),
-    }
 
 
 def read_trace(path: Path) -> list[dict[str, float]]:
@@ -261,7 +203,8 @@ def generate_report(results: list[dict[str, object]], report_dir: Path,
                     backend: str) -> Path:
     report_dir.mkdir(parents=True, exist_ok=True)
     for result in results:
-        result["metrics"] = parse_result(str(result["output"]))
+        if "metrics" not in result:
+            result["metrics"] = parse_result(str(result["output"]))
     results.sort(key=lambda item: float(item["metrics"]["objective"]))
     best = results[0]
     metrics = best["metrics"]

@@ -28,8 +28,14 @@ double RotorModel::airfoil_area_coefficient(const std::string& airfoil) {
         "Printed-mass model requires a four-digit NACA airfoil name: " + airfoil);
 }
 
-RotorModel::RotorMassProperties RotorModel::rotor_mass_properties(
+RotorModel::RotorMassProperties RotorModel::mass_properties(
     const RotorGeometry& g) const {
+    if (g.radius <= g.root_cutout || g.root_chord <= 0.0 || g.tip_chord <= 0.0 ||
+        g.blade_count < 1 || cfg_.print_material_density <= 0.0 ||
+        cfg_.infill_fraction < 0.0 || cfg_.infill_fraction > 1.0 ||
+        cfg_.wall_thickness < 0.0) {
+        throw std::invalid_argument("Invalid geometry or print configuration for mass model");
+    }
     // Integrate printed cross-section along each blade. The perimeter term models
     // solid walls; only the remaining interior receives the requested infill.
     constexpr int mass_elements = 400;
@@ -79,10 +85,10 @@ SimulationResult RotorModel::simulate_impl(
         cfg_.wall_thickness < 0.0) {
         return {.completed = false, .valid = false};
     }
-    const auto mass_properties = rotor_mass_properties(g);
-    const double rotor_mass = mass_properties.mass;
+    const auto rotor_properties = mass_properties(g);
+    const double rotor_mass = rotor_properties.mass;
     const double total_mass = cfg_.body_mass + rotor_mass;
-    const double inertia = mass_properties.inertia;
+    const double inertia = rotor_properties.inertia;
     if (inertia <= 0.0) {
         return {.completed = false, .valid = false};
     }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <string>
 
 struct AeroQuery {
@@ -76,4 +77,29 @@ struct SimulationSample {
     double mean_prandtl_loss_factor{1.0};
     double mean_axial_induction{};
     double induction_failure_fraction{};
+};
+
+struct ObjectiveConfig {
+    double maximum_omega{2500.0};
+    double omega_penalty_scale{1.0e-3};
+    double extrapolation_penalty_scale{20.0};
+    double induction_failure_penalty_scale{50.0};
+    double invalid_result_penalty{1.0e6};
+};
+
+struct OptimizationConfig {
+    static constexpr std::size_t variable_count = 5;
+
+    std::array<double, variable_count> lower_bounds{
+        0.12, 0.015, 0.010, -0.60, -0.60
+    };
+    std::array<double, variable_count> upper_bounds{
+        0.45, 0.100, 0.080, 0.25, 0.60
+    };
+    std::array<double, variable_count> initial_values{
+        0.25, 0.055, 0.025, -0.12, -0.15
+    };
+    int maximum_evaluations{500};
+    double relative_x_tolerance{1.0e-3};
+    ObjectiveConfig objective{};
 };

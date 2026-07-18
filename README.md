@@ -3,6 +3,10 @@
 Engineering-grade C++20 design optimizer for a three-bladed autorotating rotor
 carrying a 100 g drone body and electronics package.
 
+Development rules are in [`AGENTS.md`](AGENTS.md). The full design basis,
+assumptions, validation boundaries, and next goals are in
+[`docs/ENGINEERING_GOALS.md`](docs/ENGINEERING_GOALS.md).
+
 ## Model
 
 The transient simulation integrates vertical motion and rotor speed. Each blade
@@ -112,6 +116,22 @@ Build and run one optimization:
 cmake -S cpp -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ./build/autorotation_opt --root . --polar data/aero_polar.csv
+```
+
+For programmatic use, request a versioned result document instead of parsing
+terminal text:
+
+```bash
+./build/autorotation_opt --root . --polar data/aero_polar.csv \
+  --trace trace.csv --result-json result.json --quiet
+```
+
+The reusable C++ model, optimizer, and result-I/O APIs are exposed by the
+`autorotation_core` CMake target. Run focused tests with:
+
+```bash
+ctest --test-dir build --output-on-failure
+python3 -m unittest discover -s python -p 'test_*.py'
 ```
 
 The executable clamps aerodynamic queries outside the polar grid and assigns

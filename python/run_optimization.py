@@ -15,7 +15,7 @@ import shutil
 import subprocess
 import sys
 
-from aero_service import generate_table
+from optimizer_result import parse_result_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +89,8 @@ def polar_is_cached(polar: Path, stamp_path: Path, desired: dict[str, str]) -> b
 
 
 def prepare_polar(backend: str, airfoil: str, refresh: bool) -> Path:
+    from aero_service import generate_table
+
     desired = desired_polar_stamp(backend, airfoil)
     polar, stamp_path = polar_paths(backend, airfoil)
     if not refresh and polar_is_cached(polar, stamp_path, desired):
@@ -119,7 +121,7 @@ def build() -> None:
 
 def optimization_key(polar: Path) -> str:
     digest = hashlib.sha256()
-    digest.update(b"autorotation-run-cache-v2\0")
+    digest.update(b"autorotation-run-cache-v3-json\0")
     digest.update(file_sha256(EXECUTABLE).encode())
     digest.update(file_sha256(polar).encode())
     return digest.hexdigest()
@@ -132,7 +134,7 @@ def report_key(results: list[dict[str, object]], backend: str) -> str:
     digest.update(package_version("plotly").encode())
     digest.update(backend.encode())
     for result in results:
-        digest.update(str(result["output"]).encode())
+        digest.update(json.dumps(result["metrics"], sort_keys=True).encode())
         digest.update(file_sha256(Path(result["trace_path"])).encode())
     return digest.hexdigest()
 
@@ -152,31 +154,25 @@ def prepare_report(results: list[dict[str, object]], backend: str) -> Path:
     return report_path
 
 
-def optimize(polar: Path, force: bool) -> tuple[str, Path]:
+def optimize(polar: Path, force: bool) -> tuple[str, Path, dict[str, object]]:
     key = optimization_key(polar)
     result_path = RUN_CACHE / f"{key}.txt"
     trace_path = RUN_CACHE / f"{key}.csv"
-    if result_path.exists() and trace_path.exists() and not force:
+    json_path = RUN_CACHE / f"{key}.json"
+    if result_path.exists() and trace_path.exists() and json_path.exists() and not force:
         print(f"Using cached optimization for {polar.stem}")
-        return result_path.read_text(), trace_path
+        return result_path.read_text(), trace_path, json.loads(json_path.read_text())
 
+    RUN_CACHE.mkdir(parents=True, exist_ok=True)
     completed = run(
         [str(EXECUTABLE), "--root", str(ROOT), "--polar", str(polar),
-         "--trace", str(trace_path), "--quiet"],
+         "--trace", str(trace_path), "--result-json", str(json_path), "--quiet"],
         capture=True,
     )
     output = completed.stdout
-    RUN_CACHE.mkdir(parents=True, exist_ok=True)
     result_path.write_text(output)
     print(f"Cached optimization for {polar.stem}")
-    return output, trace_path
-
-
-def extract(output: str, field: str) -> str:
-    match = re.search(rf"^{re.escape(field)}:\s+(.+)$", output, re.MULTILINE)
-    if not match:
-        raise RuntimeError(f"Optimizer output is missing '{field}'")
-    return match.group(1).strip()
+    return output, trace_path, json.loads(json_path.read_text())
 
 
 def main() -> None:
@@ -211,16 +207,20 @@ def main() -> None:
         optimized = list(executor.map(lambda polar: optimize(polar, args.force), polars))
 
     results = []
-    for airfoil, polar, (output, trace_path) in zip(airfoils, polars, optimized):
+    for airfoil, polar, (output, trace_path, document) in zip(
+        airfoils, polars, optimized
+    ):
+        metrics = parse_result_json(document)
         results.append({
             "airfoil": airfoil,
             "polar": polar,
             "output": output,
             "trace_path": trace_path,
-            "objective": float(extract(output, "objective")),
-            "fall_time": extract(output, "fall time").removesuffix(" s"),
-            "impact_speed": extract(output, "impact speed").removesuffix(" m/s"),
-            "total_mass": extract(output, "total mass").removesuffix(" g"),
+            "metrics": metrics,
+            "objective": metrics["objective"],
+            "fall_time": metrics["fall_time_s"],
+            "impact_speed": metrics["impact_speed_m_s"],
+            "total_mass": metrics["total_mass_g"],
         })
 
     results.sort(key=lambda result: result["objective"])
@@ -228,8 +228,8 @@ def main() -> None:
     print("airfoil       objective   fall_s   impact_m/s   mass_g")
     for result in results:
         print(f"{result['airfoil']:<12} {result['objective']:>9.4f} "
-              f"{result['fall_time']:>8} {result['impact_speed']:>12} "
-              f"{result['total_mass']:>9}")
+              f"{result['fall_time']:>8.3f} {result['impact_speed']:>12.4f} "
+              f"{result['total_mass']:>9.3f}")
 
     best = results[0]
     shutil.copyfile(best["polar"], DEFAULT_POLAR)
