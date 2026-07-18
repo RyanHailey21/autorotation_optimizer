@@ -16,7 +16,6 @@ import subprocess
 import sys
 
 from aero_service import generate_table
-from reporting import generate_report
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +25,7 @@ RUN_CACHE = CACHE_ROOT / "runs"
 REPORT_DIR = ROOT / "reports" / "latest"
 DEFAULT_POLAR = ROOT / "data" / "aero_polar.csv"
 GENERATOR = ROOT / "python" / "aero_service.py"
+REPORT_GENERATOR = ROOT / "python" / "reporting.py"
 BUILD_DIR = ROOT / "build"
 EXECUTABLE = BUILD_DIR / "autorotation_opt"
 DEFAULT_AIRFOILS = [
@@ -125,6 +125,33 @@ def optimization_key(polar: Path) -> str:
     return digest.hexdigest()
 
 
+def report_key(results: list[dict[str, object]], backend: str) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"autorotation-report-v1\0")
+    digest.update(file_sha256(REPORT_GENERATOR).encode())
+    digest.update(package_version("plotly").encode())
+    digest.update(backend.encode())
+    for result in results:
+        digest.update(str(result["output"]).encode())
+        digest.update(file_sha256(Path(result["trace_path"])).encode())
+    return digest.hexdigest()
+
+
+def prepare_report(results: list[dict[str, object]], backend: str) -> Path:
+    report_path = REPORT_DIR / "report.html"
+    stamp_path = REPORT_DIR / "report-key.txt"
+    key = report_key(results, backend)
+    if report_path.exists() and stamp_path.exists() and stamp_path.read_text().strip() == key:
+        print(f"Using cached engineering report: {report_path.relative_to(ROOT)}")
+        return report_path
+
+    from reporting import generate_report
+
+    report_path = generate_report(results, REPORT_DIR, backend)
+    stamp_path.write_text(key + "\n")
+    return report_path
+
+
 def optimize(polar: Path, force: bool) -> tuple[str, Path]:
     key = optimization_key(polar)
     result_path = RUN_CACHE / f"{key}.txt"
@@ -209,7 +236,7 @@ def main() -> None:
     print(f"\nBest airfoil: {best['airfoil']}")
     print(best["output"], end="")
     print(f"Best polar copied to {DEFAULT_POLAR.relative_to(ROOT)}")
-    report_path = generate_report(results, REPORT_DIR, args.backend)
+    report_path = prepare_report(results, args.backend)
     print(f"Engineering report: {report_path.relative_to(ROOT)}")
 
 

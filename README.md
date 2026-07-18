@@ -47,7 +47,7 @@ CAD. Full-case constants are defined in `cpp/include/types.hpp`.
 - Ninja and a C++20 compiler
 - NLopt C++
 - Python 3.10+
-- NumPy, NeuralFoil, and AeroSandbox
+- NumPy, NeuralFoil, AeroSandbox, and Plotly
 
 Ubuntu/WSL setup:
 
@@ -75,8 +75,9 @@ The runner caches each NeuralFoil polar by generator and dependency version,
 uses CMake's incremental build, and caches each optimization by executable and
 polar contents. Independent airfoil optimizations run four-at-a-time.
 
-Every run also produces an engineering report at `reports/latest/report.html`
-with the optimized rotor planform, airfoil leaderboard, transient histories,
+Every run also produces an offline Plotly engineering report at
+`reports/latest/report.html` with the optimized rotor planform, airfoil
+leaderboard, every design variable for every candidate, transient histories,
 solver diagnostics, active constraints, and machine-readable CSV/JSON data.
 Telemetry is recorded only for each final optimized design; objective
 evaluations use the compile-time no-trace simulation path.
