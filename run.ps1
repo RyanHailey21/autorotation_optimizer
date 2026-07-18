@@ -5,7 +5,8 @@ param(
     [string]$Backend = "neuralfoil",
     [string[]]$Airfoils = @(),
     [ValidateRange(1, 64)]
-    [int]$Jobs = 4
+    [int]$Jobs = 4,
+    [switch]$OpenReport
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,4 +33,7 @@ $argumentText = $runnerArguments -join " "
 wsl bash -lc "cd '$linuxRoot' && exec bash ./run.sh $argumentText"
 if ($LASTEXITCODE -ne 0) {
     throw "Optimization failed with exit code $LASTEXITCODE."
+}
+if ($OpenReport) {
+    Start-Process -FilePath (Join-Path $windowsRoot "reports\latest\report.html")
 }

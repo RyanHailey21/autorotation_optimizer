@@ -57,6 +57,18 @@ RotorModel::RotorMassProperties RotorModel::rotor_mass_properties(
 }
 
 SimulationResult RotorModel::simulate(const RotorGeometry& g) const {
+    return simulate_impl<false>(g, nullptr);
+}
+
+SimulationResult RotorModel::simulate_with_trace(
+    const RotorGeometry& g, std::vector<SimulationSample>& trace) const {
+    trace.clear();
+    return simulate_impl<true>(g, &trace);
+}
+
+template<bool RecordTrace>
+SimulationResult RotorModel::simulate_impl(
+    const RotorGeometry& g, std::vector<SimulationSample>* trace) const {
     if (g.radius <= g.root_cutout || g.root_chord <= 0.0 || g.tip_chord <= 0.0 ||
         g.blade_count < 1 || g.radial_elements < 4) {
         return {.completed = false, .valid = false};
@@ -91,6 +103,10 @@ SimulationResult RotorModel::simulate(const RotorGeometry& g) const {
     std::vector<double> induction_warm_start(g.radial_elements, 0.0);
 
     while (height > 0.0 && time < cfg_.max_time) {
+        double step_prandtl_sum = 0.0;
+        double step_induction_sum = 0.0;
+        std::size_t step_induction_count = 0;
+        std::size_t step_induction_failures = 0;
         struct ElementState {
             double r;
             double chord;
@@ -206,9 +222,12 @@ SimulationResult RotorModel::simulate(const RotorGeometry& g) const {
                 }
                 converged = have_bracket && std::abs(solution.residual) < 1.0e-3;
                 ++induction_solve_count;
+                ++step_induction_count;
                 axial_induction_sum += solution.induction;
+                step_induction_sum += solution.induction;
                 if (!converged) {
                     ++induction_failure_count;
+                    ++step_induction_failures;
                 }
             }
             induction_warm_start[i] = solution.induction;
@@ -233,6 +252,7 @@ SimulationResult RotorModel::simulate(const RotorGeometry& g) const {
 
             ++aero_count;
             prandtl_factor_sum += element.prandtl_loss;
+            step_prandtl_sum += element.prandtl_loss;
             if (c.confidence < 0.5) {
                 ++low_confidence_count;
             }
@@ -250,6 +270,24 @@ SimulationResult RotorModel::simulate(const RotorGeometry& g) const {
         height -= down_speed * cfg_.dt;
         time += cfg_.dt;
         max_omega = std::max(max_omega, omega);
+
+        if constexpr (RecordTrace) {
+            trace->push_back({
+                .time = time,
+                .height = std::max(height, 0.0),
+                .down_speed = down_speed,
+                .omega = omega,
+                .axial_force = axial_force,
+                .aero_torque = aero_torque,
+                .mean_prandtl_loss_factor = step_prandtl_sum /
+                    static_cast<double>(g.radial_elements),
+                .mean_axial_induction = step_induction_count == 0 ? 0.0 :
+                    step_induction_sum / static_cast<double>(step_induction_count),
+                .induction_failure_fraction = step_induction_count == 0 ? 0.0 :
+                    static_cast<double>(step_induction_failures) /
+                    static_cast<double>(step_induction_count)
+            });
+        }
 
         if (!std::isfinite(height) || !std::isfinite(down_speed) || !std::isfinite(omega) ||
             omega > cfg_.max_omega) {

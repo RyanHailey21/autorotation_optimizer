@@ -6,6 +6,7 @@
 
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
@@ -63,10 +64,33 @@ static double objective(const std::vector<double>& x,
     return objective_value;
 }
 
+static void write_trace(const std::filesystem::path& path,
+                        const std::vector<SimulationSample>& trace) {
+    if (!path.parent_path().empty()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
+    std::ofstream output(path);
+    if (!output) {
+        throw std::runtime_error("Unable to write simulation trace: " + path.string());
+    }
+    output << "time_s,height_m,down_speed_m_s,omega_rad_s,axial_force_n,"
+              "aero_torque_nm,mean_prandtl_factor,mean_axial_induction,"
+              "induction_failure_fraction\n";
+    output << std::setprecision(10);
+    for (const auto& sample : trace) {
+        output << sample.time << ',' << sample.height << ',' << sample.down_speed << ','
+               << sample.omega << ',' << sample.axial_force << ',' << sample.aero_torque
+               << ',' << sample.mean_prandtl_loss_factor << ','
+               << sample.mean_axial_induction << ','
+               << sample.induction_failure_fraction << '\n';
+    }
+}
+
 int main(int argc, char** argv) {
     try {
         std::filesystem::path root = ".";
         std::filesystem::path polar_path;
+        std::filesystem::path trace_path;
         bool verbose = true;
         for (int i = 1; i < argc; ++i) {
             const std::string argument = argv[i];
@@ -74,6 +98,8 @@ int main(int argc, char** argv) {
                 root = argv[++i];
             } else if (argument == "--polar" && i + 1 < argc) {
                 polar_path = argv[++i];
+            } else if (argument == "--trace" && i + 1 < argc) {
+                trace_path = argv[++i];
             } else if (argument == "--quiet") {
                 verbose = false;
             } else {
@@ -93,19 +119,29 @@ int main(int argc, char** argv) {
         RotorModel model(env, cfg, aero);
         OptimizationContext context{&model, aero.airfoil(), verbose};
 
+        const std::vector<double> lower_bounds{0.12, 0.015, 0.010, -0.60, -0.60};
+        const std::vector<double> upper_bounds{0.45, 0.100, 0.080,  0.25,  0.60};
+        constexpr int maximum_evaluations = 500;
+        constexpr double relative_x_tolerance = 1.0e-3;
         nlopt::opt opt(nlopt::LN_COBYLA, 5);
-        opt.set_lower_bounds({0.12, 0.015, 0.010, -0.60, -0.60});
-        opt.set_upper_bounds({0.45, 0.100, 0.080,  0.25,  0.60});
+        opt.set_lower_bounds(lower_bounds);
+        opt.set_upper_bounds(upper_bounds);
         opt.set_min_objective(objective, &context);
-        opt.set_maxeval(500);
-        opt.set_xtol_rel(1e-3);
+        opt.set_maxeval(maximum_evaluations);
+        opt.set_xtol_rel(relative_x_tolerance);
 
         std::vector<double> x{0.25, 0.055, 0.025, -0.12, -0.15};
         double minimum{};
         const nlopt::result status = opt.optimize(x, minimum);
 
         const RotorGeometry best = decode(x, aero.airfoil());
-        const SimulationResult result = model.simulate(best);
+        std::vector<SimulationSample> trace;
+        const SimulationResult result = trace_path.empty()
+            ? model.simulate(best)
+            : model.simulate_with_trace(best, trace);
+        if (!trace_path.empty()) {
+            write_trace(trace_path, trace);
+        }
 
         std::cout << "\nOptimization status: " << status << "\n"
                   << "airfoil:         " << best.airfoil << "\n"
@@ -125,7 +161,20 @@ int main(int argc, char** argv) {
         std::cout << "mean tip/root F: " << result.mean_prandtl_loss_factor << "\n";
         std::cout << "mean induction a:" << result.mean_axial_induction << "\n"
                   << "induction failed: " << result.induction_failure_fraction * 100.0
-                  << " %\n";
+                  << " %\n"
+                  << "release height:   " << cfg.release_height << " m\n"
+                  << "time step:        " << cfg.dt << " s\n"
+                  << "radial elements:  " << best.radial_elements << "\n"
+                  << "root cutout:      " << best.root_cutout << " m\n"
+                  << "material density: " << cfg.print_material_density << " kg/m^3\n"
+                  << "infill fraction:  " << cfg.infill_fraction << "\n"
+                  << "wall thickness:   " << cfg.wall_thickness << " m\n"
+                  << "hardware mass:    " << cfg.printed_hardware_mass * 1000.0 << " g\n"
+                  << "optimizer:        NLopt LN_COBYLA\n"
+                  << "max evaluations:  " << maximum_evaluations << "\n"
+                  << "relative x tol:   " << relative_x_tolerance << "\n"
+                  << "radius bounds:    " << lower_bounds[0] << " " << upper_bounds[0]
+                  << " m\n";
 
         return 0;
     } catch (const std::exception& e) {

@@ -16,12 +16,14 @@ import subprocess
 import sys
 
 from aero_service import generate_table
+from reporting import generate_report
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE_ROOT = ROOT / ".cache"
 POLAR_CACHE = CACHE_ROOT / "polars"
 RUN_CACHE = CACHE_ROOT / "runs"
+REPORT_DIR = ROOT / "reports" / "latest"
 DEFAULT_POLAR = ROOT / "data" / "aero_polar.csv"
 GENERATOR = ROOT / "python" / "aero_service.py"
 BUILD_DIR = ROOT / "build"
@@ -123,22 +125,24 @@ def optimization_key(polar: Path) -> str:
     return digest.hexdigest()
 
 
-def optimize(polar: Path, force: bool) -> str:
+def optimize(polar: Path, force: bool) -> tuple[str, Path]:
     key = optimization_key(polar)
     result_path = RUN_CACHE / f"{key}.txt"
-    if result_path.exists() and not force:
+    trace_path = RUN_CACHE / f"{key}.csv"
+    if result_path.exists() and trace_path.exists() and not force:
         print(f"Using cached optimization for {polar.stem}")
-        return result_path.read_text()
+        return result_path.read_text(), trace_path
 
     completed = run(
-        [str(EXECUTABLE), "--root", str(ROOT), "--polar", str(polar), "--quiet"],
+        [str(EXECUTABLE), "--root", str(ROOT), "--polar", str(polar),
+         "--trace", str(trace_path), "--quiet"],
         capture=True,
     )
     output = completed.stdout
     RUN_CACHE.mkdir(parents=True, exist_ok=True)
     result_path.write_text(output)
     print(f"Cached optimization for {polar.stem}")
-    return output
+    return output, trace_path
 
 
 def extract(output: str, field: str) -> str:
@@ -177,14 +181,15 @@ def main() -> None:
 
     print(f"Optimizing {len(airfoils)} airfoils with {args.jobs} concurrent jobs ...")
     with ThreadPoolExecutor(max_workers=args.jobs) as executor:
-        outputs = list(executor.map(lambda polar: optimize(polar, args.force), polars))
+        optimized = list(executor.map(lambda polar: optimize(polar, args.force), polars))
 
     results = []
-    for airfoil, polar, output in zip(airfoils, polars, outputs):
+    for airfoil, polar, (output, trace_path) in zip(airfoils, polars, optimized):
         results.append({
             "airfoil": airfoil,
             "polar": polar,
             "output": output,
+            "trace_path": trace_path,
             "objective": float(extract(output, "objective")),
             "fall_time": extract(output, "fall time").removesuffix(" s"),
             "impact_speed": extract(output, "impact speed").removesuffix(" m/s"),
@@ -204,6 +209,8 @@ def main() -> None:
     print(f"\nBest airfoil: {best['airfoil']}")
     print(best["output"], end="")
     print(f"Best polar copied to {DEFAULT_POLAR.relative_to(ROOT)}")
+    report_path = generate_report(results, REPORT_DIR, args.backend)
+    print(f"Engineering report: {report_path.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

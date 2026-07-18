@@ -1,7 +1,7 @@
 # Autorotation Rotor Optimizer
 
-C++20 optimizer for a three-bladed autorotating rotor carrying a 100 g drone
-body and electronics package.
+Engineering-grade C++20 design optimizer for a three-bladed autorotating rotor
+carrying a 100 g drone body and electronics package.
 
 ## Model
 
@@ -75,6 +75,12 @@ The runner caches each NeuralFoil polar by generator and dependency version,
 uses CMake's incremental build, and caches each optimization by executable and
 polar contents. Independent airfoil optimizations run four-at-a-time.
 
+Every run also produces an engineering report at `reports/latest/report.html`
+with the optimized rotor planform, airfoil leaderboard, transient histories,
+solver diagnostics, active constraints, and machine-readable CSV/JSON data.
+Telemetry is recorded only for each final optimized design; objective
+evaluations use the compile-time no-trace simulation path.
+
 Useful PowerShell options:
 
 ```powershell
@@ -83,6 +89,7 @@ Useful PowerShell options:
 .\run.ps1 -Jobs 1
 .\run.ps1 -Backend fallback
 .\run.ps1 -Airfoils NACA0012,NACA2409,NACA4409
+.\run.ps1 -OpenReport
 ```
 
 `-Force` repeats geometry optimization, while `-RefreshPolar` regenerates the
@@ -110,10 +117,12 @@ The executable clamps aerodynamic queries outside the polar grid and assigns
 zero confidence, which feeds the objective penalty. At startup it reports the
 polar backend and airfoil.
 
-## Current limitations
+## Engineering validation boundaries
 
-This is not yet a validated flight-dynamics model. The BEMT solve is
-quasi-steady and axial-only. Remaining high-value work includes:
+The optimizer preserves explicit model and convergence diagnostics, but design
+release still requires correlation to independent analysis and physical test.
+The current BEMT solve is quasi-steady and axial-only. Remaining validation and
+model-extension work includes:
 
 1. verify force and torque signs with hand-calculated blade elements;
 2. compare fixed-RPM loads against an independent BEMT implementation;

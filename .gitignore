@@ -2,6 +2,7 @@
 .venv/
 build/
 .cache/
+reports/
 
 # Python
 __pycache__/

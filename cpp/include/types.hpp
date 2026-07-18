@@ -65,3 +65,15 @@ struct SimulationResult {
     double mean_axial_induction{};
     double induction_failure_fraction{};
 };
+
+struct SimulationSample {
+    double time{};
+    double height{};
+    double down_speed{};
+    double omega{};
+    double axial_force{};
+    double aero_torque{};
+    double mean_prandtl_loss_factor{1.0};
+    double mean_axial_induction{};
+    double induction_failure_fraction{};
+};
