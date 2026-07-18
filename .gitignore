@@ -1,0 +1,18 @@
+# Local environments and generated build products
+.venv/
+build/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# CMake user-local files
+CMakeUserPresets.json
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
