@@ -3,7 +3,9 @@
 This is an engineering-grade autorotation optimizer, not a tutorial or
 prototype. Preserve physical traceability, numerical diagnostics, and
 reproducibility when changing it. Read `docs/ENGINEERING_GOALS.md` before
-changing the model, objective, design space, or material assumptions.
+changing the model, objective, design space, or material assumptions. Read
+`docs/ARCHITECTURE.md` before changing component boundaries, structured
+artifacts, caching, or orchestration.
 
 ## Source of truth and commands
 
@@ -22,6 +24,10 @@ changing the model, objective, design space, or material assumptions.
 - NeuralFoil is an offline polar generator only. Never call NeuralFoil, Python,
   subprocesses, or file I/O from an objective evaluation.
 - Optimization must query cached, in-memory aerodynamic tables.
+- Put reusable C++ behavior in `autorotation_core`; keep `main.cpp` limited to
+  command-line parsing, component wiring, and human-readable presentation.
+- Use the versioned `--result-json` artifact for programmatic consumers. Do not
+  add another parser for human-readable terminal output.
 - Preserve the compile-time no-trace objective path. Collect telemetry only for
   final optimized candidates; reporting must not slow objective evaluations.
 - Preserve content-addressed caching for polar generation, builds where
@@ -87,6 +93,8 @@ changing the model, objective, design space, or material assumptions.
   to the task.
 - Keep dependency versions pinned and CI representative of the WSL/Linux
   production path.
+- Update `docs/ARCHITECTURE.md` when component ownership, result schemas, cache
+  inputs, or verification commands change.
 - Document any new physical assumption, calibration constant, constraint, or
   validation evidence in `docs/ENGINEERING_GOALS.md` and the user-facing README
   where appropriate.

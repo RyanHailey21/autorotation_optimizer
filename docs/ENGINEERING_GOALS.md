@@ -39,7 +39,8 @@ Current continuous bounds are:
 
 The production search currently allows 500 evaluations per airfoil with a
 relative design tolerance of 1e-3. These are part of the problem definition,
-not incidental implementation details.
+not incidental implementation details. Their implementation source of truth is
+`OptimizationConfig` in `cpp/include/types.hpp`.
 
 ## Physical model
 
@@ -91,6 +92,11 @@ penalties for:
 - maximum angular speed above 2500 rad/s;
 - aerodynamic-table extrapolation; and
 - failed axial-induction solves.
+
+Penalty thresholds and scales are explicit in `ObjectiveConfig`. Objective
+behavior is reusable and independently testable through `score_simulation()`;
+changes to those values remain engineering-model changes even though their
+software representation is configuration rather than file-local constants.
 
 Impact speed, total and rotor mass, maximum angular speed, mean Prandtl factor,
 mean axial induction, and induction-failure fraction are mandatory reported
@@ -158,4 +164,6 @@ Prioritize model credibility before expanding the search space:
 
 Any result intended for hardware selection should state the code revision,
 polar provenance, complete configuration, cache key, solver status, and known
-validation gaps.
+validation gaps. The optimizer's schema-versioned JSON result is the canonical
+machine-readable record for an individual run; terminal output is a rounded
+human-readable view.

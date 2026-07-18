@@ -5,7 +5,9 @@ carrying a 100 g drone body and electronics package.
 
 Development rules are in [`AGENTS.md`](AGENTS.md). The full design basis,
 assumptions, validation boundaries, and next goals are in
-[`docs/ENGINEERING_GOALS.md`](docs/ENGINEERING_GOALS.md).
+[`docs/ENGINEERING_GOALS.md`](docs/ENGINEERING_GOALS.md). Component boundaries,
+structured result contracts, caching, and verification tiers are described in
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Model
 
@@ -78,6 +80,10 @@ bash ./run.sh
 The runner caches each NeuralFoil polar by generator and dependency version,
 uses CMake's incremental build, and caches each optimization by executable and
 polar contents. Independent airfoil optimizations run four-at-a-time.
+
+The implementation is split into a reusable C++ `autorotation_core` library, a
+thin optimizer CLI, and Python workflow/reporting modules. Internal workflow
+consumers use schema-versioned JSON rather than parsing terminal output.
 
 Every run also produces an offline Plotly engineering report at
 `reports/latest/report.html` with the optimized rotor planform, airfoil
